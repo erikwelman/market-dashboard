@@ -20,7 +20,17 @@ export function MarketCard({ instrument, quote, loading }: MarketCardProps) {
 
   if (loading || !quote) return <SkeletonCard />;
 
-  const positive = quote.changePercent >= 0;
+  // Calculate % change from chart data for non-daily ranges
+  let changePercent = quote.changePercent;
+  let change = quote.change;
+  if (range !== "1D" && chartData && chartData.length >= 2) {
+    const firstValue = chartData[0].value;
+    const lastValue = chartData[chartData.length - 1].value;
+    changePercent = ((lastValue - firstValue) / firstValue) * 100;
+    change = lastValue - firstValue;
+  }
+
+  const positive = changePercent >= 0;
 
   return (
     <div className="bg-surface-1 border border-border rounded-lg p-4 hover:border-border-hover transition-colors">
@@ -39,12 +49,12 @@ export function MarketCard({ instrument, quote, loading }: MarketCardProps) {
             positive ? "text-gain bg-gain-bg" : "text-loss bg-loss-bg"
           )}
         >
-          {formatPercent(quote.changePercent)}
+          {formatPercent(changePercent)}
         </div>
       </div>
       <div className="text-xs text-text-muted mb-3">
         {positive ? "+" : ""}
-        {formatCurrency(quote.change, quote.currency)}
+        {formatCurrency(change, quote.currency)}
       </div>
       <div className="mb-2">
         <PriceChart

@@ -22,7 +22,18 @@ export function InstrumentDetailPanel({
   const { data: chartData } = useChartData(instrument.providerSymbol, range);
 
   const quote = quotes?.[0];
-  const positive = (quote?.changePercent ?? 0) >= 0;
+
+  // Calculate % change from chart data for non-daily ranges
+  let changePercent = quote?.changePercent ?? 0;
+  let change = quote?.change ?? 0;
+  if (range !== "1D" && chartData && chartData.length >= 2) {
+    const firstValue = chartData[0].value;
+    const lastValue = chartData[chartData.length - 1].value;
+    changePercent = ((lastValue - firstValue) / firstValue) * 100;
+    change = lastValue - firstValue;
+  }
+
+  const positive = changePercent >= 0;
 
   return (
     <>
@@ -61,11 +72,11 @@ export function InstrumentDetailPanel({
                     positive ? "text-gain bg-gain-bg" : "text-loss bg-loss-bg"
                   )}
                 >
-                  {formatPercent(quote.changePercent)}
+                  {formatPercent(changePercent)}
                 </span>
                 <span className="text-sm text-text-secondary">
                   {positive ? "+" : ""}
-                  {formatCurrency(quote.change, quote.currency)}
+                  {formatCurrency(change, quote.currency)}
                 </span>
               </div>
             </div>
