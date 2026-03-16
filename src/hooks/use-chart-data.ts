@@ -8,7 +8,7 @@ async function fetchChartData(
   const res = await fetch(
     `/api/market/chart?symbol=${encodeURIComponent(symbol)}&range=${range}`
   );
-  if (!res.ok) throw new Error("Failed to fetch chart data");
+  if (!res.ok) throw new Error(`Failed to fetch chart data (${res.status})`);
   return res.json();
 }
 

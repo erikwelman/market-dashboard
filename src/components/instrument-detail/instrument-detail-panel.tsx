@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Instrument, TimeRange } from "@/lib/market-data/types";
 import { useQuotes } from "@/hooks/use-quotes";
 import { useChartData } from "@/hooks/use-chart-data";
 import { PriceChart } from "@/components/charts/price-chart";
 import { RangeSelector } from "@/components/market-overview/range-selector";
-import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
+import { formatCurrency, formatPercent, formatVolume, computeRangeChange, cn } from "@/lib/utils";
 
 interface InstrumentDetailPanelProps {
   instrument: Instrument;
@@ -21,18 +21,16 @@ export function InstrumentDetailPanel({
   const { data: quotes } = useQuotes([instrument.providerSymbol]);
   const { data: chartData } = useChartData(instrument.providerSymbol, range);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const quote = quotes?.[0];
-
-  // Calculate % change from chart data for non-daily ranges
-  let changePercent = quote?.changePercent ?? 0;
-  let change = quote?.change ?? 0;
-  if (range !== "1D" && chartData && chartData.length >= 2) {
-    const firstValue = chartData[0].value;
-    const lastValue = chartData[chartData.length - 1].value;
-    changePercent = ((lastValue - firstValue) / firstValue) * 100;
-    change = lastValue - firstValue;
-  }
-
+  const { change, changePercent } = computeRangeChange(chartData, quote, range);
   const positive = changePercent >= 0;
 
   return (
@@ -105,18 +103,17 @@ export function InstrumentDetailPanel({
               {quote.marketState && (
                 <Stat label="Market State" value={quote.marketState} />
               )}
-              {quote.fiftyTwoWeekHigh != null && (
-                <Stat
-                  label="52wk High"
-                  value={formatCurrency(quote.fiftyTwoWeekHigh, quote.currency)}
-                />
-              )}
-              {quote.fiftyTwoWeekLow != null && (
-                <Stat
-                  label="52wk Low"
-                  value={formatCurrency(quote.fiftyTwoWeekLow, quote.currency)}
-                />
-              )}
+              {quote.fiftyTwoWeekHigh != null &&
+                quote.fiftyTwoWeekLow != null && (
+                  <div className="col-span-2">
+                    <FiftyTwoWeekRange
+                      low={quote.fiftyTwoWeekLow}
+                      high={quote.fiftyTwoWeekHigh}
+                      current={quote.price}
+                      currency={quote.currency}
+                    />
+                  </div>
+                )}
             </div>
           )}
         </div>
@@ -132,6 +129,46 @@ function Stat({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="text-sm font-medium tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function FiftyTwoWeekRange({
+  low,
+  high,
+  current,
+  currency,
+}: {
+  low: number;
+  high: number;
+  current: number;
+  currency: string;
+}) {
+  const range = high - low;
+  const pct = range > 0 ? Math.min(Math.max(((current - low) / range) * 100, 0), 100) : 50;
+
+  return (
+    <div className="bg-surface-2 rounded px-3 py-2">
+      <div className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
+        52-Week Range
+      </div>
+      <div className="flex items-center gap-2 text-xs tabular-nums">
+        <span className="text-text-secondary shrink-0">
+          {formatCurrency(low, currency)}
+        </span>
+        <div className="flex-1 relative h-1.5 bg-surface-3 rounded-full">
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-accent border-2 border-surface-1"
+            style={{ left: `${pct}%`, marginLeft: "-6px" }}
+          />
+        </div>
+        <span className="text-text-secondary shrink-0">
+          {formatCurrency(high, currency)}
+        </span>
+      </div>
+      <div className="text-[10px] text-text-muted mt-1 text-center">
+        {pct.toFixed(0)}% of range
+      </div>
     </div>
   );
 }

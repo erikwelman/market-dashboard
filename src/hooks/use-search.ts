@@ -3,7 +3,7 @@ import type { SearchResult } from "@/lib/market-data/types";
 
 async function fetchSearch(query: string): Promise<SearchResult[]> {
   const res = await fetch(`/api/market/search?q=${encodeURIComponent(query)}`);
-  if (!res.ok) throw new Error("Failed to search");
+  if (!res.ok) throw new Error(`Failed to search (${res.status})`);
   return res.json();
 }
 

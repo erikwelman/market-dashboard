@@ -6,7 +6,7 @@ import { useChartData } from "@/hooks/use-chart-data";
 import { PriceChart } from "@/components/charts/price-chart";
 import { RangeSelector } from "./range-selector";
 import { SkeletonCard } from "@/components/ui/skeleton-card";
-import { formatCurrency, formatPercent, cn } from "@/lib/utils";
+import { formatCurrency, formatPercent, computeRangeChange, cn } from "@/lib/utils";
 
 interface MarketCardProps {
   instrument: Instrument;
@@ -20,24 +20,35 @@ export function MarketCard({ instrument, quote, loading }: MarketCardProps) {
 
   if (loading || !quote) return <SkeletonCard />;
 
-  // Calculate % change from chart data for non-daily ranges
-  let changePercent = quote.changePercent;
-  let change = quote.change;
-  if (range !== "1D" && chartData && chartData.length >= 2) {
-    const firstValue = chartData[0].value;
-    const lastValue = chartData[chartData.length - 1].value;
-    changePercent = ((lastValue - firstValue) / firstValue) * 100;
-    change = lastValue - firstValue;
-  }
-
+  const { change, changePercent } = computeRangeChange(chartData, quote, range);
   const positive = changePercent >= 0;
 
   return (
     <div className="bg-surface-1 border border-border rounded-lg p-4 hover:border-border-hover transition-colors">
       <div className="flex justify-between items-start mb-1">
         <div>
-          <div className="text-xs text-text-secondary font-medium">
-            {instrument.symbol}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-secondary font-medium">
+              {instrument.symbol}
+            </span>
+            {quote.marketState && quote.marketState !== "REGULAR" && (
+              <span
+                className={cn(
+                  "text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                  quote.marketState === "CLOSED"
+                    ? "text-text-muted bg-surface-3"
+                    : "text-accent bg-accent/10"
+                )}
+              >
+                {quote.marketState === "PRE" || quote.marketState === "PREPRE"
+                  ? "Pre"
+                  : quote.marketState === "POST" || quote.marketState === "POSTPOST"
+                    ? "After Hrs"
+                    : quote.marketState === "CLOSED"
+                      ? "Closed"
+                      : quote.marketState}
+              </span>
+            )}
           </div>
           <div className="text-lg font-semibold tabular-nums">
             {formatCurrency(quote.price, quote.currency)}
