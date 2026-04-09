@@ -46,17 +46,28 @@ async function rateLimitedFetch(url: string): Promise<Response> {
   return edgarFetch(url);
 }
 
-async function edgarFetch(url: string): Promise<Response> {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": SEC_USER_AGENT,
-      Accept: "application/json, text/xml, */*",
-    },
-  });
-  if (!res.ok) {
+async function edgarFetch(url: string, retries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": SEC_USER_AGENT,
+        Accept: "application/json, text/xml, */*",
+      },
+    });
+
+    if (res.ok) return res;
+
+    // SEC returns 403 or 429 when rate limited — retry with backoff
+    if ((res.status === 403 || res.status === 429) && attempt < retries) {
+      const waitMs = Math.min(2000 * Math.pow(2, attempt), 15000);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+
     throw new Error(`SEC EDGAR request failed: ${res.status} ${url}`);
   }
-  return res;
+
+  throw new Error(`SEC EDGAR request failed after ${retries} retries: ${url}`);
 }
 
 // Fix #13: LRU cache for parsed 13F holdings (immutable once filed)
@@ -125,8 +136,7 @@ function parseInfoTableXml(xml: string): Holding[] {
     const shareType =
       (extractXmlField(entry, "sshPrnamtType") as "SH" | "PRN") || "SH";
 
-    // Fix #10: SEC 13F values are reported in thousands of dollars
-    const value = rawValue * 1000;
+    const value = rawValue;
 
     holdings.push({
       nameOfIssuer: extractXmlField(entry, "nameOfIssuer"),
@@ -138,36 +148,101 @@ function parseInfoTableXml(xml: string): Holding[] {
     });
   }
 
+  // Step 1: Aggregate by CUSIP (merges split lots from multiple managers)
+  const byCusip = new Map<string, Holding>();
+  for (const h of holdings) {
+    const existing = byCusip.get(h.cusip);
+    if (existing) {
+      existing.shares += h.shares;
+      existing.value += h.value;
+    } else {
+      byCusip.set(h.cusip, { ...h });
+    }
+  }
+
+  // Step 2: Aggregate CUSIPs that share the same issuer name (merges share classes)
+  const byName = new Map<string, Holding>();
+  for (const h of byCusip.values()) {
+    const key = h.nameOfIssuer.toUpperCase();
+    const existing = byName.get(key);
+    if (existing) {
+      existing.shares += h.shares;
+      existing.value += h.value;
+    } else {
+      byName.set(key, { ...h });
+    }
+  }
+  const merged = Array.from(byName.values());
+
   // Calculate portfolio weights
-  const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
+  const totalValue = merged.reduce((sum, h) => sum + h.value, 0);
   if (totalValue > 0) {
-    for (const h of holdings) {
+    for (const h of merged) {
       h.portfolioWeight = (h.value / totalValue) * 100;
     }
   }
 
-  return holdings;
+  return merged;
 }
 
 function classifyChanges(
   currentHoldings: Holding[],
   previousHoldings: Holding[]
 ): PositionChange[] {
-  const prevMap = new Map<string, Holding>();
+  // Match by CUSIP first, then try to match remaining by normalised name
+  // (SEC sometimes changes spelling between filings, e.g. "INC" vs "INCORPORATED")
+  const prevByCusip = new Map<string, Holding>();
   for (const h of previousHoldings) {
-    prevMap.set(h.cusip, h);
+    prevByCusip.set(h.cusip, h);
   }
 
-  const currMap = new Map<string, Holding>();
+  const currByCusip = new Map<string, Holding>();
   for (const h of currentHoldings) {
-    currMap.set(h.cusip, h);
+    currByCusip.set(h.cusip, h);
+  }
+
+  // Build normalised name index for fuzzy matching unmatched positions
+  function normaliseName(name: string): string {
+    return name
+      .toUpperCase()
+      // Collapse spaced-out abbreviations like "P L C" -> "PLC"
+      .replace(/\b([A-Z]) ([A-Z]) ([A-Z])\b/g, "$1$2$3")
+      .replace(/\b([A-Z]) ([A-Z])\b/g, "$1$2")
+      .replace(/[^A-Z0-9]/g, " ")
+      // Strip common suffixes/prefixes
+      .replace(
+        /\b(CORP|CORPORATION|INC|INCORPORATED|LTD|LIMITED|PLC|CO|COMPANY|HLDGS|HOLDINGS|HOLD|NEW|DEL|CL [A-Z]|CLASS [A-Z]|SER [A-Z]|SERIES [A-Z]|THE|OF|AND|GROUP|GP|GRP|INTL|INTERNATIONAL|AMER|AMERICA|AMERICAN)\b/g,
+        ""
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  const prevByNorm = new Map<string, Holding>();
+  for (const h of previousHoldings) {
+    prevByNorm.set(normaliseName(h.nameOfIssuer), h);
+  }
+  const currByNorm = new Map<string, Holding>();
+  for (const h of currentHoldings) {
+    currByNorm.set(normaliseName(h.nameOfIssuer), h);
+  }
+
+  // Find previous holding for a current one
+  function findPrev(curr: Holding): Holding | undefined {
+    return prevByCusip.get(curr.cusip) ?? prevByNorm.get(normaliseName(curr.nameOfIssuer));
+  }
+
+  // Check if a previous holding has a match in current
+  function hasCurrMatch(prev: Holding): boolean {
+    if (currByCusip.has(prev.cusip)) return true;
+    return currByNorm.has(normaliseName(prev.nameOfIssuer));
   }
 
   const changes: PositionChange[] = [];
 
   // Current holdings: NEW, ADDED, REDUCED, UNCHANGED
   for (const curr of currentHoldings) {
-    const prev = prevMap.get(curr.cusip);
+    const prev = findPrev(curr);
     let changeType: PositionChangeType;
     const previousShares = prev?.shares ?? 0;
     const previousValue = prev?.value ?? 0;
@@ -201,7 +276,7 @@ function classifyChanges(
 
   // Exited positions (in previous but not in current)
   for (const prev of previousHoldings) {
-    if (!currMap.has(prev.cusip)) {
+    if (!hasCurrMatch(prev)) {
       changes.push({
         nameOfIssuer: prev.nameOfIssuer,
         titleOfClass: prev.titleOfClass,

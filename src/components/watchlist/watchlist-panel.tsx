@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import type { Instrument } from "@/lib/market-data/types";
 import { useQuotes } from "@/hooks/use-quotes";
+import { useWatchlistAlerts } from "@/hooks/use-watchlist-alerts";
 import { WatchlistHeader } from "./watchlist-header";
 import { WatchlistRow } from "./watchlist-row";
+import { AlertCreator } from "@/components/alerts/alert-creator";
 import { SkeletonRow } from "@/components/ui/skeleton-row";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -22,6 +25,19 @@ export function WatchlistPanel({
 }: WatchlistPanelProps) {
   const symbols = instruments.map((i) => i.providerSymbol);
   const { data: quotes, isLoading } = useQuotes(symbols);
+  const { addAlert, checkAlerts } = useWatchlistAlerts();
+  const [alertSymbol, setAlertSymbol] = useState<string | null>(null);
+
+  // Check alerts whenever quotes refresh
+  useEffect(() => {
+    if (quotes && quotes.length > 0) {
+      checkAlerts(quotes);
+    }
+  }, [quotes, checkAlerts]);
+
+  const alertInstrument = alertSymbol
+    ? instruments.find((i) => i.providerSymbol === alertSymbol)
+    : null;
 
   return (
     <div className="bg-surface-1 border border-border rounded-lg overflow-hidden">
@@ -51,9 +67,19 @@ export function WatchlistPanel({
               quote={quote}
               onSelect={() => onSelectInstrument(instrument)}
               onRemove={() => onRemoveInstrument(instrument.providerSymbol)}
+              onAlert={() => setAlertSymbol(instrument.providerSymbol)}
             />
           );
         })
+      )}
+
+      {alertSymbol && alertInstrument && (
+        <AlertCreator
+          symbol={alertSymbol}
+          currency={alertInstrument.currency}
+          onAdd={addAlert}
+          onClose={() => setAlertSymbol(null)}
+        />
       )}
     </div>
   );

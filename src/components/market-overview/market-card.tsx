@@ -72,6 +72,7 @@ export function MarketCard({ instrument, quote, loading }: MarketCardProps) {
           data={chartData || []}
           height={200}
           positive={positive}
+          currency={quote.currency}
         />
       </div>
       <RangeSelector selected={range} onSelect={setRange} compact />

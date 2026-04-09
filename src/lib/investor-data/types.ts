@@ -48,6 +48,11 @@ export interface PositionChange {
   valueChange: number;
 }
 
+export interface DatedPositionChange extends PositionChange {
+  quarter: string;
+  reportDate: string;
+}
+
 export interface FilingSummary {
   investorName: string;
   cik: string;

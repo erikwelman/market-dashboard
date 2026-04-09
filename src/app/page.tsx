@@ -1,37 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { Instrument } from "@/lib/market-data/types";
-import type { TrackedInvestor } from "@/lib/investor-data/types";
 import { AppShell } from "@/components/layout/app-shell";
+import { Navigation } from "@/components/layout/navigation";
 import { Header } from "@/components/layout/header";
 import { MarketOverviewCards } from "@/components/market-overview/market-overview-cards";
 import { WatchlistPanel } from "@/components/watchlist/watchlist-panel";
 import { InstrumentDetailPanel } from "@/components/instrument-detail/instrument-detail-panel";
 import { InstrumentSearchModal } from "@/components/instrument-detail/instrument-search-modal";
-import { InvestorWatchlistPanel } from "@/components/smart-money/investor-watchlist-panel";
-import { InvestorDetailPanel } from "@/components/smart-money/investor-detail-panel";
-import { InvestorSearchModal } from "@/components/smart-money/investor-search-modal";
-import { SmartMoneyTrendSummary } from "@/components/smart-money/smart-money-trend-summary";
+import { AlertToast } from "@/components/alerts/alert-toast";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useWatchlist } from "@/hooks/use-watchlist";
-import { useInvestorWatchlist } from "@/hooks/use-investor-watchlist";
+import { useWatchlistAlerts } from "@/hooks/use-watchlist-alerts";
+import { useQuotes } from "@/hooks/use-quotes";
 
-export default function Home() {
+export default function DashboardPage() {
   const { instruments, addInstrument, removeInstrument, loaded } = useWatchlist();
-  const {
-    investors,
-    addInvestor,
-    removeInvestor,
-  } = useInvestorWatchlist();
   const [selectedInstrument, setSelectedInstrument] = useState<Instrument | null>(null);
-  const [selectedInvestor, setSelectedInvestor] = useState<TrackedInvestor | null>(null);
   const [showSearch, setShowSearch] = useState(false);
-  const [showInvestorSearch, setShowInvestorSearch] = useState(false);
+
+  const {
+    alerts,
+    loaded: alertsLoaded,
+    newlyTriggered,
+    checkAlerts,
+    dismissNewlyTriggered,
+  } = useWatchlistAlerts();
+
+  // Get symbols that have active, untriggered alerts
+  const alertSymbols = useMemo(
+    () => [...new Set(alerts.filter((a) => a.active && !a.triggered).map((a) => a.symbol))],
+    [alerts]
+  );
+
+  // Poll quotes for alert symbols (30s interval via useQuotes)
+  const { data: alertQuotes } = useQuotes(alertSymbols);
+
+  // Check alerts against live quotes
+  useEffect(() => {
+    if (alertsLoaded && alertQuotes && alertQuotes.length > 0) {
+      checkAlerts(alertQuotes);
+    }
+  }, [alertQuotes, alertsLoaded, checkAlerts]);
 
   return (
     <AppShell>
       <Header />
+      <Navigation />
 
       <ErrorBoundary sectionName="Markets">
         <section className="mb-8">
@@ -64,34 +80,10 @@ export default function Home() {
         </section>
       </ErrorBoundary>
 
-      <ErrorBoundary sectionName="Smart Money">
-        <section className="mb-8">
-          <InvestorWatchlistPanel
-            investors={investors}
-            onAddClick={() => setShowInvestorSearch(true)}
-            onSelectInvestor={setSelectedInvestor}
-            onRemoveInvestor={removeInvestor}
-          />
-        </section>
-      </ErrorBoundary>
-
-      <ErrorBoundary sectionName="Smart Money Consensus">
-        <section>
-          <SmartMoneyTrendSummary ciks={investors.map((i) => i.cik)} />
-        </section>
-      </ErrorBoundary>
-
       {selectedInstrument && (
         <InstrumentDetailPanel
           instrument={selectedInstrument}
           onClose={() => setSelectedInstrument(null)}
-        />
-      )}
-
-      {selectedInvestor && (
-        <InvestorDetailPanel
-          investor={selectedInvestor}
-          onClose={() => setSelectedInvestor(null)}
         />
       )}
 
@@ -102,12 +94,11 @@ export default function Home() {
         />
       )}
 
-      {showInvestorSearch && (
-        <InvestorSearchModal
-          onAdd={addInvestor}
-          onClose={() => setShowInvestorSearch(false)}
-        />
-      )}
+      {/* Alert toast popup */}
+      <AlertToast
+        alerts={newlyTriggered}
+        onDismiss={dismissNewlyTriggered}
+      />
     </AppShell>
   );
 }

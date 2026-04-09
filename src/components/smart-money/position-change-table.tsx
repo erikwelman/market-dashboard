@@ -3,13 +3,14 @@
 import type {
   PositionChange,
   PositionChangeType,
+  DatedPositionChange,
 } from "@/lib/investor-data/types";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface PositionChangeTableProps {
-  changes: PositionChange[];
+  changes: (PositionChange | DatedPositionChange)[];
   filter?: PositionChangeType | "BUYS" | "SELLS";
-  quarterLabel: string;
+  quarterLabel?: string;
 }
 
 const CHANGE_LABELS: Record<PositionChangeType, string> = {
@@ -27,6 +28,10 @@ const CHANGE_COLORS: Record<PositionChangeType, string> = {
   EXITED: "text-loss bg-loss-bg",
   UNCHANGED: "text-text-muted bg-surface-3",
 };
+
+function isDated(c: PositionChange | DatedPositionChange): c is DatedPositionChange {
+  return "quarter" in c;
+}
 
 export function PositionChangeTable({
   changes,
@@ -48,9 +53,15 @@ export function PositionChangeTable({
     filtered = filtered.filter((c) => c.changeType === f);
   }
 
-  const sorted = [...filtered].sort(
-    (a, b) => Math.abs(b.valueChange) - Math.abs(a.valueChange)
-  );
+  // If items have dates, they're already sorted newest-first from the hook.
+  // Otherwise sort by absolute value change.
+  const sorted = filtered.length > 0 && isDated(filtered[0])
+    ? filtered
+    : [...filtered].sort(
+        (a, b) => Math.abs(b.valueChange) - Math.abs(a.valueChange)
+      );
+
+  const hasDates = sorted.length > 0 && isDated(sorted[0]);
 
   const title =
     filter === "BUYS"
@@ -63,105 +74,140 @@ export function PositionChangeTable({
     return (
       <div>
         <h4 className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
-          {quarterLabel} {title}
+          {quarterLabel ? `${quarterLabel} ` : ""}{title}
         </h4>
         <div className="text-xs text-text-muted py-6 text-center bg-surface-2 rounded">
-          No {title.toLowerCase()} this quarter
+          No {title.toLowerCase()} to show
         </div>
       </div>
     );
   }
 
+  // Group by quarter for section headers when showing dated changes
+  let currentQuarter = "";
+
   return (
     <div>
       <h4 className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
-        {quarterLabel} {title} ({sorted.length})
+        {quarterLabel ? `${quarterLabel} ` : ""}{title} ({sorted.length})
       </h4>
       <div className="border border-border rounded overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-2 px-3 py-2 text-[10px] text-text-muted uppercase tracking-wider border-b border-border bg-surface-2">
-          <div className="w-[50px]">Type</div>
-          <div className="flex-1">Stock</div>
-          <div className="w-[80px] text-right">Shares</div>
-          <div className="w-[80px] text-right">Δ Shares</div>
-          <div className="w-[55px] text-right">Δ %</div>
-          <div className="w-[80px] text-right">Value</div>
+        <div
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 text-[10px] text-text-muted uppercase tracking-wider border-b border-border bg-surface-2",
+            hasDates ? "grid grid-cols-[70px_50px_1fr_80px_80px_55px_80px]" : "flex"
+          )}
+        >
+          {hasDates && <div>Quarter</div>}
+          <div className={hasDates ? "" : "w-[50px]"}>Type</div>
+          <div className={hasDates ? "" : "flex-1"}>Stock</div>
+          <div className={hasDates ? "text-right" : "w-[80px] text-right"}>Shares</div>
+          <div className={hasDates ? "text-right" : "w-[80px] text-right"}>Δ Shares</div>
+          <div className={hasDates ? "text-right" : "w-[55px] text-right"}>Δ %</div>
+          <div className={hasDates ? "text-right" : "w-[80px] text-right"}>Value</div>
         </div>
         {/* Rows */}
         <div className="max-h-[500px] overflow-y-auto">
-          {sorted.map((change) => (
-            <div
-              key={change.cusip}
-              className="flex items-center gap-2 px-3 py-2 text-xs border-b border-border last:border-b-0 hover:bg-surface-2 transition-colors"
-            >
-              {/* Activity type */}
-              <div className="w-[50px]">
-                <span
+          {sorted.map((change, idx) => {
+            const dated = isDated(change) ? change : null;
+            const showQuarterDivider = dated && dated.quarter !== currentQuarter;
+            if (dated) currentQuarter = dated.quarter;
+
+            return (
+              <div key={dated ? `${dated.quarter}-${change.cusip}-${idx}` : change.cusip}>
+                {/* Quarter group divider */}
+                {showQuarterDivider && (
+                  <div className="px-3 py-1.5 text-[10px] font-semibold text-accent bg-accent/5 border-b border-border">
+                    {dated!.quarter}
+                  </div>
+                )}
+                <div
                   className={cn(
-                    "text-[10px] font-medium px-1.5 py-0.5 rounded",
-                    CHANGE_COLORS[change.changeType]
+                    "px-3 py-2 text-xs border-b border-border last:border-b-0 hover:bg-surface-2 transition-colors",
+                    hasDates
+                      ? "grid grid-cols-[70px_50px_1fr_80px_80px_55px_80px] items-center gap-2"
+                      : "flex items-center gap-2"
                   )}
                 >
-                  {CHANGE_LABELS[change.changeType]}
-                </span>
-              </div>
-              {/* Company */}
-              <div className="flex-1 min-w-0">
-                <div className="text-text-primary truncate">
-                  {change.nameOfIssuer}
+                  {/* Quarter */}
+                  {hasDates && (
+                    <div className="text-[10px] text-text-muted tabular-nums">
+                      {dated?.quarter}
+                    </div>
+                  )}
+                  {/* Activity type */}
+                  <div className={hasDates ? "" : "w-[50px]"}>
+                    <span
+                      className={cn(
+                        "text-[10px] font-medium px-1.5 py-0.5 rounded",
+                        CHANGE_COLORS[change.changeType]
+                      )}
+                    >
+                      {CHANGE_LABELS[change.changeType]}
+                    </span>
+                  </div>
+                  {/* Company */}
+                  <div className={cn("min-w-0", hasDates ? "" : "flex-1")}>
+                    <div className="text-text-primary truncate">
+                      {change.nameOfIssuer}
+                    </div>
+                  </div>
+                  {/* Current shares */}
+                  <div className={cn("text-right text-text-secondary tabular-nums", hasDates ? "" : "w-[80px]")}>
+                    {change.currentShares > 0
+                      ? formatNumber(change.currentShares)
+                      : "—"}
+                  </div>
+                  {/* Share change */}
+                  <div
+                    className={cn(
+                      "text-right tabular-nums",
+                      hasDates ? "" : "w-[80px]",
+                      change.sharesChange > 0
+                        ? "text-gain"
+                        : change.sharesChange < 0
+                          ? "text-loss"
+                          : "text-text-muted"
+                    )}
+                  >
+                    {change.sharesChange > 0 ? "+" : ""}
+                    {change.sharesChange !== 0
+                      ? formatNumber(change.sharesChange)
+                      : "—"}
+                  </div>
+                  {/* % change */}
+                  <div
+                    className={cn(
+                      "text-right tabular-nums",
+                      hasDates ? "" : "w-[55px]",
+                      change.sharesChangePercent > 0
+                        ? "text-gain"
+                        : change.sharesChangePercent < 0
+                          ? "text-loss"
+                          : "text-text-muted"
+                    )}
+                  >
+                    {change.changeType === "NEW"
+                      ? "New"
+                      : change.changeType === "EXITED"
+                        ? "100%"
+                        : `${Math.abs(change.sharesChangePercent).toFixed(1)}%`}
+                  </div>
+                  {/* Value */}
+                  <div className={cn("text-right text-text-primary tabular-nums", hasDates ? "" : "w-[80px]")}>
+                    {change.currentValue > 0
+                      ? formatCurrency(change.currentValue, "USD", true)
+                      : formatCurrency(
+                          change.previousValue,
+                          "USD",
+                          true
+                        )}
+                  </div>
                 </div>
               </div>
-              {/* Current shares */}
-              <div className="w-[80px] text-right text-text-secondary tabular-nums">
-                {change.currentShares > 0
-                  ? formatNumber(change.currentShares)
-                  : "—"}
-              </div>
-              {/* Share change */}
-              <div
-                className={cn(
-                  "w-[80px] text-right tabular-nums",
-                  change.sharesChange > 0
-                    ? "text-gain"
-                    : change.sharesChange < 0
-                      ? "text-loss"
-                      : "text-text-muted"
-                )}
-              >
-                {change.sharesChange > 0 ? "+" : ""}
-                {change.sharesChange !== 0
-                  ? formatNumber(change.sharesChange)
-                  : "—"}
-              </div>
-              {/* % change */}
-              <div
-                className={cn(
-                  "w-[55px] text-right tabular-nums",
-                  change.sharesChangePercent > 0
-                    ? "text-gain"
-                    : change.sharesChangePercent < 0
-                      ? "text-loss"
-                      : "text-text-muted"
-                )}
-              >
-                {change.changeType === "NEW"
-                  ? "New"
-                  : change.changeType === "EXITED"
-                    ? "100%"
-                    : `${Math.abs(change.sharesChangePercent).toFixed(1)}%`}
-              </div>
-              {/* Value */}
-              <div className="w-[80px] text-right text-text-primary tabular-nums">
-                {change.currentValue > 0
-                  ? formatCurrency(change.currentValue , "USD", true)
-                  : formatCurrency(
-                      change.previousValue ,
-                      "USD",
-                      true
-                    )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

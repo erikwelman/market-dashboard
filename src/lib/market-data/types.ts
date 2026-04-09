@@ -26,6 +26,15 @@ export interface HistoricalPoint {
   value: number;
 }
 
+export interface ChartPoint extends HistoricalPoint {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export type ChartType = "area" | "candlestick";
+
 export type TimeRange =
   | "1D"
   | "5D"
@@ -42,4 +51,13 @@ export interface SearchResult {
   name: string;
   exchange: string;
   type: string;
+}
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  publisher: string;
+  link: string;
+  publishedAt: string;
+  relatedTickers: string[];
 }

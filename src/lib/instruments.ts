@@ -71,7 +71,7 @@ export const DEFAULT_WATCHLIST: Instrument[] = [
   {
     symbol: "AI1",
     providerSymbol: "AI1.AX",
-    name: "Airtasker Ltd",
+    name: "Adisyn Ltd",
     exchange: "ASX",
     currency: "AUD",
     type: "equity",
@@ -79,7 +79,7 @@ export const DEFAULT_WATCHLIST: Instrument[] = [
   {
     symbol: "CTD",
     providerSymbol: "CTD.AX",
-    name: "Corporate Travel Mgmt",
+    name: "Corporate Travel Management",
     exchange: "ASX",
     currency: "AUD",
     type: "equity",

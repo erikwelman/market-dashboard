@@ -54,14 +54,16 @@ export function InvestorDetailPanel({
     : "";
 
   // Fetch holdings and changes for selected quarter
-  const { data: holdings, isLoading: holdingsLoading } = useHoldings(
+  const { data: holdings, isLoading: holdingsLoading, isError: holdingsError, refetch: refetchHoldings } = useHoldings(
     investor.cik,
     selectedFiling?.accessionNumber ?? null
   );
-  const { data: changes, isLoading: changesLoading } = usePositionChanges(
+  const { data: changes, isLoading: changesLoading, isError: changesError, refetch: refetchChanges } = usePositionChanges(
     investor.cik,
     selectedFiling?.accessionNumber ?? null
   );
+
+
 
   // Compute summary stats from changes
   const stats = useMemo(() => {
@@ -81,7 +83,13 @@ export function InvestorDetailPanel({
     [holdings]
   );
 
+  // If on a now-empty tab, show holdings instead
+  const buysEmpty = stats ? stats.buys + stats.adds === 0 : false;
+  const sellsEmpty = stats ? stats.reduces + stats.exits === 0 : false;
+  const effectiveTab = (tab === "buys" && buysEmpty) || (tab === "sells" && sellsEmpty) ? "holdings" : tab;
+
   const isLoading = historyLoading || holdingsLoading || changesLoading;
+  const hasError = holdingsError || changesError;
 
   return (
     <>
@@ -91,8 +99,8 @@ export function InvestorDetailPanel({
         onClick={onClose}
       />
       {/* Panel */}
-      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[600px] bg-surface-1 border-l border-border z-50 overflow-y-auto">
-        <div className="p-6">
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-[600px] lg:max-w-none lg:left-0 bg-surface-1 border-l border-border lg:border-l-0 z-50 overflow-y-auto">
+        <div className="p-6 lg:max-w-5xl lg:mx-auto">
           {/* Header */}
           <div className="flex items-start justify-between mb-1">
             <div className="min-w-0">
@@ -292,40 +300,47 @@ export function InvestorDetailPanel({
                 { key: "buys", label: "Buys" },
                 { key: "sells", label: "Sells" },
               ] as { key: Tab; label: string }[]
-            ).map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={cn(
-                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-[1px]",
-                  tab === t.key
-                    ? "text-accent border-accent"
-                    : "text-text-secondary border-transparent hover:text-text-primary"
-                )}
-              >
-                {t.label}
-                {/* Show count badges */}
-                {stats && t.key === "activity" && stats.totalActivity > 0 && (
-                  <span className="ml-1 text-text-muted">
-                    {stats.totalActivity}
-                  </span>
-                )}
-                {stats &&
-                  t.key === "buys" &&
-                  stats.buys + stats.adds > 0 && (
+            ).map((t) => {
+              const buysCount = stats ? stats.buys + stats.adds : 0;
+              const sellsCount = stats ? stats.reduces + stats.exits : 0;
+              const disabled =
+                (t.key === "buys" && stats && buysCount === 0) ||
+                (t.key === "sells" && stats && sellsCount === 0);
+
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => !disabled && setTab(t.key)}
+                  disabled={!!disabled}
+                  className={cn(
+                    "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-[1px]",
+                    disabled
+                      ? "text-text-muted/40 border-transparent cursor-not-allowed"
+                      : effectiveTab === t.key
+                        ? "text-accent border-accent"
+                        : "text-text-secondary border-transparent hover:text-text-primary"
+                  )}
+                >
+                  {t.label}
+                  {/* Show count badges */}
+                  {stats && t.key === "activity" && stats.totalActivity > 0 && (
+                    <span className="ml-1 text-text-muted">
+                      {stats.totalActivity}
+                    </span>
+                  )}
+                  {stats && t.key === "buys" && buysCount > 0 && (
                     <span className="ml-1 text-gain">
-                      {stats.buys + stats.adds}
+                      {buysCount}
                     </span>
                   )}
-                {stats &&
-                  t.key === "sells" &&
-                  stats.reduces + stats.exits > 0 && (
+                  {stats && t.key === "sells" && sellsCount > 0 && (
                     <span className="ml-1 text-loss">
-                      {stats.reduces + stats.exits}
+                      {sellsCount}
                     </span>
                   )}
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
 
           {/* Tab content */}
@@ -338,13 +353,25 @@ export function InvestorDetailPanel({
                 />
               ))}
             </div>
+          ) : hasError ? (
+            <div className="py-8 text-center">
+              <div className="text-sm text-text-muted mb-3">
+                Failed to load holdings data. The SEC may be temporarily rate-limiting requests.
+              </div>
+              <button
+                onClick={() => { refetchHoldings(); refetchChanges(); }}
+                className="text-xs font-medium text-accent hover:text-accent-hover transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
           ) : !selectedFiling ? (
             <div className="text-sm text-text-muted py-8 text-center">
               No 13F filing data available
             </div>
           ) : (
             <>
-              {tab === "holdings" && holdings && (
+              {effectiveTab === "holdings" && holdings && (
                 <HoldingsTable
                   holdings={holdings}
                   changes={changes ?? undefined}
@@ -352,14 +379,14 @@ export function InvestorDetailPanel({
                 />
               )}
 
-              {tab === "activity" && changes && (
+              {effectiveTab === "activity" && changes && (
                 <PositionChangeTable
                   changes={changes}
                   quarterLabel={quarterLabel}
                 />
               )}
 
-              {tab === "buys" && changes && (
+              {effectiveTab === "buys" && changes && (
                 <PositionChangeTable
                   changes={changes}
                   filter="BUYS"
@@ -367,7 +394,7 @@ export function InvestorDetailPanel({
                 />
               )}
 
-              {tab === "sells" && changes && (
+              {effectiveTab === "sells" && changes && (
                 <PositionChangeTable
                   changes={changes}
                   filter="SELLS"

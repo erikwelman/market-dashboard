@@ -1,6 +1,7 @@
 "use client";
 
 import { RefreshStatus } from "@/components/ui/refresh-status";
+import { AlertBell } from "@/components/alerts/alert-bell";
 import { useQuotes } from "@/hooks/use-quotes";
 import { MARKET_OVERVIEW_INSTRUMENTS } from "@/lib/instruments";
 import { formatPercent, cn } from "@/lib/utils";
@@ -50,7 +51,10 @@ export function Header() {
           )}
         </div>
       </div>
-      <RefreshStatus />
+      <div className="flex items-center gap-4">
+        <AlertBell />
+        <RefreshStatus />
+      </div>
     </header>
   );
 }
