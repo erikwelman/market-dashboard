@@ -42,17 +42,18 @@ export async function GET(request: NextRequest) {
     const summaryDetail = quoteSummaryResult.summaryDetail ?? {};
 
     // Extract cash flow history from fundamentalsTimeSeries
-    let cashFlowHistory: CashFlowYear[] = cashFlowTS
+    let cashFlowHistory: CashFlowYear[] = (cashFlowTS as unknown as Record<string, unknown>[])
       .filter(
-        (row: Record<string, unknown>) =>
+        (row) =>
           row.operatingCashFlow != null || row.freeCashFlow != null
       )
-      .map((row: Record<string, unknown>) => {
-        const opCF = toNum(row, "operatingCashFlow") ?? 0;
-        const capEx = toNum(row, "capitalExpenditure") ?? 0;
-        const fcf = toNum(row, "freeCashFlow") ?? opCF + capEx;
+      .map((row) => {
+        const r = row;
+        const opCF = toNum(r, "operatingCashFlow") ?? 0;
+        const capEx = toNum(r, "capitalExpenditure") ?? 0;
+        const fcf = toNum(r, "freeCashFlow") ?? opCF + capEx;
         return {
-          year: extractYear(row),
+          year: extractYear(r),
           operatingCashflow: opCF,
           capitalExpenditures: capEx,
           freeCashFlow: fcf,
@@ -85,9 +86,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Extract revenue history from fundamentalsTimeSeries financials
-    const revenueHistory: RevenueYear[] = financialsTS
-      .filter((row: Record<string, unknown>) => row.totalRevenue != null)
-      .map((row: Record<string, unknown>) => ({
+    const revenueHistory: RevenueYear[] = (financialsTS as unknown as Record<string, unknown>[])
+      .filter((row) => row.totalRevenue != null)
+      .map((row) => ({
         year: extractYear(row),
         totalRevenue: toNum(row, "totalRevenue") ?? 0,
       }));
@@ -121,12 +122,11 @@ export async function GET(request: NextRequest) {
     // Interest expense and tax rate from fundamentalsTimeSeries financials
     let interestExpense: number | null = null;
     let taxRate = 0.21;
-    const sortedFinancials = [...financialsTS].sort(
-      (a: Record<string, unknown>, b: Record<string, unknown>) =>
-        extractYear(b) - extractYear(a)
+    const sortedFinancials = ([...financialsTS] as unknown as Record<string, unknown>[]).sort(
+      (a, b) => extractYear(b) - extractYear(a)
     );
     for (const row of sortedFinancials) {
-      const r = row as Record<string, unknown>;
+      const r = row;
       if (interestExpense == null && r.interestExpense != null) {
         interestExpense = toNum(r, "interestExpense");
       }

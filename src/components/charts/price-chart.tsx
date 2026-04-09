@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createChart, AreaSeries, CandlestickSeries, type IChartApi, type ISeriesApi, ColorType, type UTCTimestamp } from "lightweight-charts";
-import type { ChartPoint, ChartType } from "@/lib/market-data/types";
+import type { HistoricalPoint, ChartPoint, ChartType } from "@/lib/market-data/types";
 import { formatCurrency } from "@/lib/utils";
 
 interface PriceChartProps {
-  data: ChartPoint[];
+  data: HistoricalPoint[] | ChartPoint[];
   height?: number;
   positive?: boolean;
   currency?: string;
@@ -131,7 +131,7 @@ export function PriceChart({ data, height = 300, positive = true, currency = "US
       const sorted = [...data].sort((a, b) => a.time - b.time);
       if (chartType === "candlestick") {
         (seriesRef.current as ISeriesApi<"Candlestick">).setData(
-          sorted.map((d) => ({ time: d.time as UTCTimestamp, open: d.open, high: d.high, low: d.low, close: d.close }))
+          sorted.map((d) => { const c = d as ChartPoint; return { time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }; })
         );
       } else {
         (seriesRef.current as ISeriesApi<"Area">).setData(
