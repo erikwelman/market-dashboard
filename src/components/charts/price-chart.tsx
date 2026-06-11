@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createChart, AreaSeries, CandlestickSeries, type IChartApi, type ISeriesApi, ColorType, type UTCTimestamp } from "lightweight-charts";
+import { createChart, AreaSeries, CandlestickSeries, LineSeries, HistogramSeries, type IChartApi, type ISeriesApi, ColorType, type UTCTimestamp } from "lightweight-charts";
 import type { HistoricalPoint, ChartPoint, ChartType } from "@/lib/market-data/types";
+import { computeSMA, computeRSI, toVolumeBars, type ChartIndicators } from "@/lib/indicators";
 import { formatCurrency } from "@/lib/utils";
 
 interface PriceChartProps {
@@ -11,7 +12,17 @@ interface PriceChartProps {
   positive?: boolean;
   currency?: string;
   chartType?: ChartType;
+  indicators?: ChartIndicators;
 }
+
+const RSI_PANE_HEIGHT = 90;
+
+const INDICATOR_LINE_OPTIONS = {
+  lineWidth: 1,
+  priceLineVisible: false,
+  lastValueVisible: false,
+  crosshairMarkerVisible: false,
+} as const;
 
 interface DragState {
   startX: number;
@@ -20,19 +31,28 @@ interface DragState {
   currentPrice: number;
 }
 
-export function PriceChart({ data, height = 300, positive = true, currency = "USD", chartType = "area" }: PriceChartProps) {
+export function PriceChart({ data, height = 300, positive = true, currency = "USD", chartType = "area", indicators }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Area"> | ISeriesApi<"Candlestick"> | null>(null);
+  const indicatorSeriesRef = useRef<{
+    sma50?: ISeriesApi<"Line">;
+    sma200?: ISeriesApi<"Line">;
+    rsi?: ISeriesApi<"Line">;
+    volume?: ISeriesApi<"Histogram">;
+  }>({});
   const [drag, setDrag] = useState<DragState | null>(null);
   const isDraggingRef = useRef(false);
   const lastCrosshairPrice = useRef<number | null>(null);
+
+  const { sma50 = false, sma200 = false, rsi = false, volume = false } = indicators ?? {};
+  const totalHeight = height + (rsi ? RSI_PANE_HEIGHT : 0);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
-      height,
+      height: totalHeight,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "#9aa0ab",
@@ -91,6 +111,54 @@ export function PriceChart({ data, height = 300, positive = true, currency = "US
     chartRef.current = chart;
     seriesRef.current = series;
 
+    const indicatorSeries: typeof indicatorSeriesRef.current = {};
+    if (sma50) {
+      indicatorSeries.sma50 = chart.addSeries(
+        LineSeries,
+        { ...INDICATOR_LINE_OPTIONS, color: "#f0a91b" },
+        0
+      );
+    }
+    if (sma200) {
+      indicatorSeries.sma200 = chart.addSeries(
+        LineSeries,
+        { ...INDICATOR_LINE_OPTIONS, color: "#b388ff" },
+        0
+      );
+    }
+    if (volume) {
+      indicatorSeries.volume = chart.addSeries(HistogramSeries, {
+        priceScaleId: "volume",
+        priceFormat: { type: "volume" },
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      // Overlay volume in the bottom 20% of the main pane
+      chart.priceScale("volume").applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+      });
+    }
+    if (rsi) {
+      const rsiSeries = chart.addSeries(
+        LineSeries,
+        { ...INDICATOR_LINE_OPTIONS, color: "#448aff" },
+        1
+      );
+      for (const price of [30, 70]) {
+        rsiSeries.createPriceLine({
+          price,
+          color: "rgba(154, 160, 171, 0.5)",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: false,
+          title: "",
+        });
+      }
+      chart.panes()[1]?.setHeight(RSI_PANE_HEIGHT);
+      indicatorSeries.rsi = rsiSeries;
+    }
+    indicatorSeriesRef.current = indicatorSeries;
+
     // Track crosshair price for drag start
     chart.subscribeCrosshairMove((param) => {
       if (!param.seriesData || !seriesRef.current) return;
@@ -123,8 +191,9 @@ export function PriceChart({ data, height = 300, positive = true, currency = "US
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      indicatorSeriesRef.current = {};
     };
-  }, [height, positive, chartType]);
+  }, [totalHeight, positive, chartType, sma50, sma200, rsi, volume]);
 
   useEffect(() => {
     if (seriesRef.current && data.length > 0) {
@@ -138,9 +207,24 @@ export function PriceChart({ data, height = 300, positive = true, currency = "US
           sorted.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }))
         );
       }
+
+      const ind = indicatorSeriesRef.current;
+      const asLineData = (points: { time: number; value: number }[]) =>
+        points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value }));
+      ind.sma50?.setData(asLineData(computeSMA(sorted, 50)));
+      ind.sma200?.setData(asLineData(computeSMA(sorted, 200)));
+      ind.rsi?.setData(asLineData(computeRSI(sorted, 14)));
+      ind.volume?.setData(
+        toVolumeBars(sorted).map((b) => ({
+          time: b.time as UTCTimestamp,
+          value: b.value,
+          color: b.color,
+        }))
+      );
+
       chartRef.current?.timeScale().fitContent();
     }
-  }, [data, chartType]);
+  }, [data, chartType, sma50, sma200, rsi, volume]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (lastCrosshairPrice.current == null) return;

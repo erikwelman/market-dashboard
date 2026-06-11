@@ -61,6 +61,15 @@ export async function GET(request: NextRequest) {
       eps: toNum(stats, "trailingEps"),
       bookValue: toNum(stats, "bookValue"),
       revenuePerShare: toNum(financial, "revenuePerShare"),
+      currentPrice: toNum(financial, "currentPrice"),
+      targetMeanPrice: toNum(financial, "targetMeanPrice"),
+      targetHighPrice: toNum(financial, "targetHighPrice"),
+      targetLowPrice: toNum(financial, "targetLowPrice"),
+      recommendationMean: toNum(financial, "recommendationMean"),
+      recommendationKey: toStr(financial, "recommendationKey"),
+      numberOfAnalystOpinions: toNum(financial, "numberOfAnalystOpinions"),
+      fiftyTwoWeekHigh: toNum(summary, "fiftyTwoWeekHigh"),
+      fiftyTwoWeekLow: toNum(summary, "fiftyTwoWeekLow"),
     };
 
     // Try to get the company name from a quote call
@@ -93,6 +102,11 @@ function toNum(obj: Record<string, unknown>, key: string): number | null {
   const val = obj[key];
   if (val == null || typeof val !== "number" || !isFinite(val)) return null;
   return val;
+}
+
+function toStr(obj: Record<string, unknown>, key: string): string | null {
+  const val = obj[key];
+  return typeof val === "string" && val.length > 0 ? val : null;
 }
 
 function toDate(obj: Record<string, unknown>, key: string): string | null {

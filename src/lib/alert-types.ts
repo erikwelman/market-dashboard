@@ -76,6 +76,15 @@ export interface Fundamentals {
   eps: number | null;
   bookValue: number | null;
   revenuePerShare: number | null;
+  currentPrice: number | null;
+  targetMeanPrice: number | null;
+  targetHighPrice: number | null;
+  targetLowPrice: number | null;
+  recommendationMean: number | null;
+  recommendationKey: string | null;
+  numberOfAnalystOpinions: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
 }
 
 export interface InsiderTrade {

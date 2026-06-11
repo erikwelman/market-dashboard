@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearch } from "@/hooks/use-search";
+import { searchResultToInstrument } from "@/lib/instruments";
 import type { Instrument } from "@/lib/market-data/types";
 
 interface InstrumentSearchModalProps {
@@ -25,13 +26,7 @@ export function InstrumentSearchModal({ onAdd, onClose }: InstrumentSearchModalP
   }, [query]);
 
   const handleSelect = (result: { symbol: string; name: string; exchange: string; type: string }) => {
-    const instrument: Instrument = {
-      symbol: result.symbol.replace(/\.AX$|\.AS$/, ""),
-      providerSymbol: result.symbol,
-      name: result.name,
-      exchange: result.exchange,
-      type: result.type === "CRYPTOCURRENCY" ? "crypto" : result.type === "INDEX" ? "index" : "equity",
-    };
+    const instrument: Instrument = searchResultToInstrument(result);
     onAdd(instrument);
     onClose();
   };

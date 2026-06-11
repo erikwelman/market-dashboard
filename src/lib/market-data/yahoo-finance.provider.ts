@@ -55,6 +55,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
         high: q.high ?? q.close!,
         low: q.low ?? q.close!,
         close: q.close!,
+        volume: q.volume ?? undefined,
       }));
   }
 

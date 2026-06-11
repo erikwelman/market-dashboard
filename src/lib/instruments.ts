@@ -1,4 +1,19 @@
-import type { Instrument } from "./market-data/types";
+import type { Instrument, SearchResult } from "./market-data/types";
+
+export function searchResultToInstrument(result: SearchResult): Instrument {
+  return {
+    symbol: result.symbol.replace(/\.AX$|\.AS$/, ""),
+    providerSymbol: result.symbol,
+    name: result.name,
+    exchange: result.exchange,
+    type:
+      result.type === "CRYPTOCURRENCY"
+        ? "crypto"
+        : result.type === "INDEX"
+          ? "index"
+          : "equity",
+  };
+}
 
 export const MARKET_OVERVIEW_INSTRUMENTS: Instrument[] = [
   {

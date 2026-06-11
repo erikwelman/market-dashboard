@@ -7,8 +7,9 @@ import { useWatchlistAlerts } from "@/hooks/use-watchlist-alerts";
 import { useQuotes } from "@/hooks/use-quotes";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { href: "/", label: "Dashboard" },
+  { href: "/compare", label: "Compare" },
   { href: "/smart-money", label: "Smart Money" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/research", label: "Research" },

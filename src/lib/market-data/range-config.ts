@@ -52,6 +52,10 @@ export function getRangeParams(range: TimeRange): RangeParams {
   }
 }
 
+export function isIntraday(range: TimeRange): boolean {
+  return range === "1D" || range === "5D";
+}
+
 export const ALL_RANGES: TimeRange[] = [
   "1D",
   "5D",

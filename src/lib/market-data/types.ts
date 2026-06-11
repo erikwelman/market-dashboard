@@ -31,6 +31,7 @@ export interface ChartPoint extends HistoricalPoint {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 export type ChartType = "area" | "candlestick";

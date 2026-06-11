@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Fundamentals } from "@/lib/alert-types";
 
-async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
+export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
   const res = await fetch(`/api/instruments/fundamentals?symbol=${encodeURIComponent(symbol)}`);
   if (!res.ok) throw new Error(`Failed to fetch fundamentals (${res.status})`);
   return res.json();

@@ -5,6 +5,9 @@ import type { Instrument, TimeRange, ChartType } from "@/lib/market-data/types";
 import { useQuotes } from "@/hooks/use-quotes";
 import { useChartData } from "@/hooks/use-chart-data";
 import { useNews } from "@/hooks/use-news";
+import { useIndicatorPrefs } from "@/hooks/use-indicator-prefs";
+import { isIntraday } from "@/lib/market-data/range-config";
+import type { ChartIndicators } from "@/lib/indicators";
 import { PriceChart } from "@/components/charts/price-chart";
 import { RangeSelector } from "@/components/market-overview/range-selector";
 import { NewsSection } from "@/components/instrument-detail/news-section";
@@ -51,6 +54,23 @@ export function InstrumentDetailPanel({
   const quote = quotes?.[0];
   const { change, changePercent } = computeRangeChange(chartData, quote, range);
   const positive = changePercent >= 0;
+
+  const { prefs: indicatorPrefs, toggle: toggleIndicator } = useIndicatorPrefs();
+  const intraday = isIntraday(range);
+  // SMA/RSI need daily+ bars to be meaningful — force off on intraday ranges
+  const effectiveIndicators: ChartIndicators = {
+    sma50: indicatorPrefs.sma50 && !intraday,
+    sma200: indicatorPrefs.sma200 && !intraday,
+    rsi: indicatorPrefs.rsi && !intraday,
+    volume: indicatorPrefs.volume,
+  };
+
+  const INDICATOR_TOGGLES: { key: keyof ChartIndicators; label: string; dailyOnly: boolean }[] = [
+    { key: "sma50", label: "SMA50", dailyOnly: true },
+    { key: "sma200", label: "SMA200", dailyOnly: true },
+    { key: "rsi", label: "RSI", dailyOnly: true },
+    { key: "volume", label: "VOL", dailyOnly: false },
+  ];
 
   return (
     <>
@@ -128,11 +148,34 @@ export function InstrumentDetailPanel({
                   positive={positive}
                   currency={quote?.currency}
                   chartType={chartType}
+                  indicators={effectiveIndicators}
                 />
               </div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
                 <RangeSelector selected={range} onSelect={setRange} />
                 <div className="flex items-center gap-1">
+                  {INDICATOR_TOGGLES.map(({ key, label, dailyOnly }) => {
+                    const disabled = dailyOnly && intraday;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => toggleIndicator(key)}
+                        disabled={disabled}
+                        title={disabled ? "Daily+ ranges only" : undefined}
+                        className={cn(
+                          "px-2 py-1 text-xs rounded font-medium transition-colors",
+                          disabled
+                            ? "text-text-muted opacity-40 cursor-not-allowed"
+                            : indicatorPrefs[key]
+                              ? "bg-accent text-white"
+                              : "text-text-secondary hover:text-text-primary hover:bg-surface-3"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                  <div className="w-px h-4 bg-border mx-1" />
                   {(["area", "candlestick"] as const).map((type) => (
                     <button
                       key={type}
