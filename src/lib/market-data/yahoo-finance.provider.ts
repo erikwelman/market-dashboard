@@ -59,10 +59,13 @@ export class YahooFinanceProvider implements MarketDataProvider {
   }
 
   async searchInstruments(query: string): Promise<SearchResult[]> {
-    const result = await yf.search(query, {
-      quotesCount: 10,
-      newsCount: 0,
-    });
+    // validateResult: false — Yahoo's search response schema drifts over time
+    // and strict validation throws on otherwise-usable data, killing search.
+    const result = (await yf.search(
+      query,
+      { quotesCount: 10, newsCount: 0 },
+      { validateResult: false }
+    )) as { quotes?: Record<string, unknown>[] };
 
     return (result.quotes || [])
       .filter((q: Record<string, unknown>) => q.symbol && q.shortname)
